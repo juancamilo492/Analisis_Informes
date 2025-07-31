@@ -1,13 +1,18 @@
 {
   "name": "google-drive-gpt",
   "version": "1.0.0",
+  "description": "Google Drive GPT Bridge",
   "main": "index.js",
+  "engines": {
+    "node": "18.x",
+    "npm": "9.x"
+  },
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "googleapis": "^126.0.1",
-    "cors": "^2.8.5"
+    "express": "4.18.2",
+    "googleapis": "105.0.0",
+    "cors": "2.8.5"
   }
 }
