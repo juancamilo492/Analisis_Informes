@@ -3,17 +3,18 @@
   "version": "1.0.0",
   "description": "Google Drive GPT Bridge",
   "main": "index.js",
-  "engines": {
-    "node": "18.x",
-    "npm": "9.x"
-  },
   "scripts": {
     "start": "node index.js"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
+    "cors": "2.8.5",
     "express": "4.18.2",
     "googleapis": "105.0.0",
-    "cors": "2.8.5",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.5.2",
+    "xlsx": "^0.18.5"
   }
 }
