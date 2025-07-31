@@ -25,7 +25,7 @@ function streamToBuffer(stream) {
   });
 }
 
-// === Endpoint: Verificar estado ===
+// === Endpoint: Verificar estadoo ===
 app.get('/health', (req, res) => {
   res.json({ status: 'alive', timestamp: new Date().toISOString() });
 });
