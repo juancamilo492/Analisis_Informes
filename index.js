@@ -15,6 +15,7 @@ const REDIRECT_URI = process.env.REDIRECT_URI || (process.env.REPL_URL ? `${proc
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 let storedTokens = null;
 
+// Página de inicio
 app.get('/', (req, res) => {
   res.send(`
     <h1>Google Drive GPT Bridge</h1>
@@ -24,14 +25,16 @@ app.get('/', (req, res) => {
   `);
 });
 
+// Autenticación OAuth
 app.get('/auth', (req, res) => {
   const authUrl = oauth2Client.generateAuthUrl({
-    scope: ['https://www.googleapis.com/auth/drive.readonly'],
+    scope: ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/documents.readonly'],
     access_type: 'offline'
   });
   res.redirect(authUrl);
 });
 
+// Callback de autenticación
 app.get('/callback', async (req, res) => {
   try {
     const { code } = req.query;
@@ -45,6 +48,7 @@ app.get('/callback', async (req, res) => {
   }
 });
 
+// Listar carpetas
 app.get('/folders', async (req, res) => {
   try {
     if (!storedTokens) return notAuthenticated(res, req);
@@ -62,6 +66,7 @@ app.get('/folders', async (req, res) => {
   }
 });
 
+// Listar archivos dentro de una carpeta
 app.get('/folder/:folderId/files', async (req, res) => {
   try {
     if (!storedTokens) return notAuthenticated(res, req);
@@ -82,7 +87,7 @@ app.get('/folder/:folderId/files', async (req, res) => {
   }
 });
 
-// ✅ SEARCH MEJORADO
+// Buscar archivos con mapeo de tipo MIME
 app.get('/search', async (req, res) => {
   try {
     if (!storedTokens) return res.status(401).json({ error: 'No autenticado' });
@@ -127,6 +132,7 @@ app.get('/search', async (req, res) => {
   }
 });
 
+// Descargar contenido de archivo
 app.get('/file/:fileId/content', async (req, res) => {
   try {
     if (!storedTokens) return notAuthenticated(res, req);
@@ -143,31 +149,48 @@ app.get('/file/:fileId/content', async (req, res) => {
   }
 });
 
+// Obtener texto de PDF o Google Docs
 app.get('/file/:fileId/text', async (req, res) => {
   try {
     if (!storedTokens) return notAuthenticated(res, req);
     const { fileId } = req.params;
     oauth2Client.setCredentials(storedTokens);
+
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
+    const docs = google.docs({ version: 'v1', auth: oauth2Client });
+
     const file = await drive.files.get({ fileId, fields: 'id, name, mimeType' });
 
-    if (file.data.mimeType !== 'application/pdf') {
-      return res.status(400).json({ error: 'El archivo no es un PDF.' });
+    if (file.data.mimeType === 'application/pdf') {
+      const response = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+      const buffer = await streamToBuffer(response.data);
+      const data = await pdf(buffer);
+      return res.json({
+        file: { name: file.data.name, id: file.data.id },
+        type: 'pdf',
+        text: data.text
+      });
     }
 
-    const response = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
-    const buffer = await streamToBuffer(response.data);
-    const data = await pdf(buffer);
+    if (file.data.mimeType === 'application/vnd.google-apps.document') {
+      const doc = await docs.documents.get({ documentId: fileId });
+      const text = doc.data.body.content
+        .map(e => e.paragraph?.elements?.map(el => el.textRun?.content || '').join('') || '')
+        .join('');
+      return res.json({
+        file: { name: file.data.name, id: file.data.id },
+        type: 'google-doc',
+        text: text
+      });
+    }
 
-    res.json({
-      file: { name: file.data.name, id: file.data.id },
-      text: data.text
-    });
+    return res.status(415).json({ error: 'Tipo de archivo no soportado para extracción de texto.' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// Utilidad: convertir stream en buffer
 function streamToBuffer(readableStream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -177,6 +200,7 @@ function streamToBuffer(readableStream) {
   });
 }
 
+// Prueba de conexión
 app.get('/test', async (req, res) => {
   try {
     const response = await fetch(`${req.protocol}://${req.get('host')}/folders`);
@@ -193,10 +217,12 @@ app.get('/test', async (req, res) => {
   }
 });
 
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'alive', timestamp: new Date().toISOString() });
 });
 
+// Helper para autenticación no válida
 function notAuthenticated(res, req) {
   return res.status(401).json({
     error: 'No autenticado. Ve a /auth primero',
@@ -204,6 +230,7 @@ function notAuthenticated(res, req) {
   });
 }
 
+// Keep-alive para Replit o Render
 const keepAlive = () => {
   setInterval(() => {
     if (process.env.REPL_URL) {
